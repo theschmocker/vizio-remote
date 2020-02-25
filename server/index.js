@@ -1,10 +1,15 @@
+const http = require('http');
 const smartcast = require('vizio-smart-cast');
-const WebSocket = require('ws');
 
-const wss = new WebSocket.Server({ port: 8080 });
+const express = require('express');
+const app = express();
+const router = express.Router();
+
+const { setupSocketServer } = require('./socket-server');
 
 const tvConfig = require('./tv-data.json');
 const tv = new smartcast(tvConfig.ip, tvConfig.authToken);
+
 
 // https://github.com/exiva/Vizio_SmartCast_API/issues/8
 tv.control.navigate.up = function() {
@@ -18,68 +23,6 @@ tv.control.navigate.right = function() {
 tv.control.navigate.exit = function() {
     return tv.control.keyCommand(4, 3);
 }
-
-async function getTVState() {
-  const powerReq = tv.power.currentMode().then(response => {
-    return !!response.ITEMS[0].VALUE;
-  })
-
-  const audioSettings = tv.settings.audio.get();
-
-  const [power, settings] = await Promise.all([powerReq, audioSettings]);
-
-  const muted = settings.ITEMS.find(item => item.CNAME === 'mute').VALUE !== 'Off';
-  const volume = settings.ITEMS.find(item => item.CNAME === 'volume').VALUE; 
-
-  return {
-    power,
-    muted, 
-    volume,
-  }
-}
-
-// TODO: can probably replace this this wss.clients
-const subscribers = [];
-
-let state;
-
-wss.on('connection', async function connection(ws) {
-  subscribers.push(ws);
-
-  const state = await getTVState();
-
-  ws.send(JSON.stringify(state));
-
-  ws.on('close', () => {
-    const index = subscribers.findIndex(sub => sub === ws);
-    subscribers.splice(index, 1);
-  })
-});
-
-// TODO: should only run when there are socket clients connected
-setInterval(async () => {
-  const nextState = await getTVState();
-
-  if (!state) {
-    state = nextState;
-  }
-
-  const hasChanged = Object.entries(nextState).reduce((hasChanged, [key, value]) => {
-    return hasChanged || state[key] !== value
-  }, false)
-
-  if (hasChanged) {
-    state = nextState;
-    subscribers.forEach(ws => {
-      ws.send(JSON.stringify(nextState));
-    });
-  }
-
-}, 500);
-
-const express = require('express');
-const app = express();
-const router = express.Router();
 
 // TODO: setup server for front end code outside of dev
 router.get('/', (_req, res) => {
@@ -156,4 +99,10 @@ router.get('/info', async (_req, res) => {
 
 app.use('/api', router);
 
-app.listen(3000);
+const server = http.createServer(app);
+
+setupSocketServer(server, tv);
+
+server.listen(3000, () => {
+  console.log('Listening on port 3000');
+});

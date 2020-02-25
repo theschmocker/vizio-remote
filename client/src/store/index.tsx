@@ -76,7 +76,7 @@ export const TVContext = createContext({
   actions: store.actions
 });
 
-const socket = new WebSocket(`ws://${window.location.hostname}:8080`);
+const socket = new WebSocket(`ws://${window.location.hostname}:3000`);
 
 export const TVProvider: React.FC = ({ children }) => {
   const [state, setState] = useState<TVState>(initialState);

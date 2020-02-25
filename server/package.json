@@ -17,6 +17,7 @@
     "ws": "^7.2.1"
   },
   "devDependencies": {
+    "@types/node": "^13.7.4",
     "nodemon": "^2.0.2"
   }
 }
